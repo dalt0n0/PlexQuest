@@ -55,8 +55,8 @@ The app appears in **Unknown Sources** in your Quest library.
 **Requirements:** Android Studio Hedgehog (2023.1.1) or later, JDK 17
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/PlexQuestApp.git
-cd PlexQuestApp
+git clone https://github.com/dalt0n0/PlexQuest.git
+cd PlexQuest
 
 # Debug build
 ./gradlew assembleDebug
