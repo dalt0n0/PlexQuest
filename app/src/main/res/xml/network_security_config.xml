@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Allows cleartext HTTP for local Plex servers (LAN).
+    Remote/cloud connections still use HTTPS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Private LAN ranges for local Plex servers -->
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <domain includeSubdomains="true">172.16.0.0</domain>
+    </domain-config>
+</network-security-config>

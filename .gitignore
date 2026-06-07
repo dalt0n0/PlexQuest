@@ -1,0 +1,26 @@
+# Android build
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+release/
+
+# Kotlin
+*.class
+
+# Logs
+*.log
+
+# Secrets — never commit
+google-services.json
+local.properties
+keystore.properties
