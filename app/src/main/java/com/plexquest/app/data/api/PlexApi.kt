@@ -33,6 +33,12 @@ interface PlexApi {
     ): Response<PlexMediaContainer>
 
     @GET
+    suspend fun getHomeHubs(
+        @Url url: String,
+        @Header("X-Plex-Token") token: String,
+    ): Response<PlexMediaContainer>
+
+    @GET
     suspend fun getMetadata(
         @Url url: String,
         @Header("X-Plex-Token") token: String,
@@ -49,4 +55,11 @@ interface PlexApi {
         @Url url: String,
         @Header("X-Plex-Token") token: String,
     ): Response<PlexMediaContainer>
+
+    // Scrobble / timeline progress — Plex ignores the response body
+    @GET
+    suspend fun reportTimeline(
+        @Url url: String,
+        @Header("X-Plex-Token") token: String,
+    ): Response<Unit>
 }

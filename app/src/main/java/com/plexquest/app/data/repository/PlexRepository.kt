@@ -5,6 +5,7 @@ import com.plexquest.app.data.models.LibraryType
 import com.plexquest.app.data.models.MediaItem
 import com.plexquest.app.data.models.MediaLibrary
 import com.plexquest.app.data.models.MetadataData
+import com.plexquest.app.data.models.PlexHub
 import com.plexquest.app.data.models.PlexServer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -156,10 +157,62 @@ class PlexRepository @Inject constructor(
         }
     }
 
+    fun getHomeHubs(server: PlexServer): Flow<PlexResult<List<PlexHub>>> = flow {
+        emit(PlexResult.Loading)
+        try {
+            val url = "${server.baseUrl}/hubs/home?count=20&includeEmpty=0"
+            val response = plexApi.getHomeHubs(url, server.token)
+            if (response.isSuccessful) {
+                val hubs = response.body()?.mediaContainer?.hubs
+                    ?.filter { (it.metadata?.size ?: 0) > 0 }
+                    ?.map { hub ->
+                        hub.copy(metadata = hub.metadata?.map { it } )
+                    } ?: emptyList()
+                emit(PlexResult.Success(hubs))
+            } else {
+                emit(PlexResult.Error("Server error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            emit(PlexResult.Error("Network error: ${e.message}", e))
+        }
+    }
+
+    suspend fun reportTimeline(
+        server: PlexServer,
+        ratingKey: String,
+        partKey: String,
+        state: String,  // "playing" | "paused" | "stopped"
+        positionMs: Long,
+        durationMs: Long,
+    ) {
+        try {
+            val url = "${server.baseUrl}/:/timeline" +
+                "?ratingKey=$ratingKey" +
+                "&key=/library/metadata/$ratingKey" +
+                "&state=$state" +
+                "&time=$positionMs" +
+                "&duration=$durationMs" +
+                "&hasMDE=1"
+            plexApi.reportTimeline(url, server.token)
+        } catch (_: Exception) { /* best-effort, don't crash */ }
+    }
+
     fun buildStreamUrl(server: PlexServer, partKey: String): String =
         "${server.baseUrl}$partKey?X-Plex-Token=${server.token}"
 
-    private fun MetadataData.toMediaItem(server: PlexServer) = MediaItem(
+    fun buildTranscodeUrl(server: PlexServer, ratingKey: String, partKey: String, clientId: String): String {
+        val encodedPath = java.net.URLEncoder.encode(partKey, "UTF-8")
+        return "${server.baseUrl}/video/:/transcode/universal/start.m3u8" +
+            "?path=/library/metadata/$ratingKey" +
+            "&mediaIndex=0&partIndex=0" +
+            "&protocol=hls&fastSeek=1&directPlay=0&directStream=0" +
+            "&videoResolution=1920x1080&maxVideoBitrate=8000" +
+            "&X-Plex-Token=${server.token}" +
+            "&X-Plex-Client-Identifier=$clientId" +
+            "&X-Plex-Product=PlexQuest"
+    }
+
+    fun MetadataData.toMediaItem(server: PlexServer) = MediaItem(
         ratingKey = ratingKey,
         title = title,
         year = year,

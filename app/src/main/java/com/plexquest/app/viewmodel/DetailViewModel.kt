@@ -50,29 +50,10 @@ class DetailViewModel @Inject constructor(
                     return@launch
                 }
                 is PlexResult.Success -> {
-                    val meta = metaResult.data
-                    val item = MediaItem(
-                        ratingKey = meta.ratingKey,
-                        title = meta.title,
-                        year = meta.year,
-                        summary = meta.summary,
-                        thumb = meta.thumb?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" },
-                        art = meta.art?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" },
-                        type = meta.type,
-                        duration = meta.duration,
-                        viewOffset = meta.viewOffset,
-                        grandparentTitle = meta.grandparentTitle,
-                        parentIndex = meta.parentIndex,
-                        index = meta.index,
-                        contentRating = meta.contentRating,
-                        rating = meta.rating,
-                        audienceRating = meta.audienceRating,
-                        addedAt = meta.addedAt,
-                    )
+                    val item = with(repository) { metaResult.data.toMediaItem(server) }
                     _state.update { it.copy(item = item) }
 
-                    // Load children for shows (seasons) and seasons (episodes)
-                    if (meta.type == "show" || meta.type == "season") {
+                    if (metaResult.data.type == "show" || metaResult.data.type == "season") {
                         val childResult = repository.getChildren(server, ratingKey)
                             .first { it !is PlexResult.Loading }
                         if (childResult is PlexResult.Success) {

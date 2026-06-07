@@ -65,9 +65,19 @@ data class PlexMediaContainer(
 data class MediaContainerData(
     @SerializedName("Directory") val directories: List<DirectoryData>?,
     @SerializedName("Metadata") val metadata: List<MetadataData>?,
+    @SerializedName("Hub") val hubs: List<PlexHub>?,
     val size: Int,
     val title1: String?,
     val title2: String?,
+)
+
+data class PlexHub(
+    val title: String,
+    val type: String?,
+    val hubIdentifier: String?,
+    val size: Int,
+    val more: Boolean = false,
+    @SerializedName("Metadata") val metadata: List<MetadataData>?,
 )
 
 data class DirectoryData(

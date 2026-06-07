@@ -21,6 +21,7 @@ import com.plexquest.app.ui.screens.LoginScreen
 import com.plexquest.app.ui.screens.PlayerScreen
 import com.plexquest.app.ui.screens.SearchScreen
 import com.plexquest.app.ui.screens.ServerPickerScreen
+import com.plexquest.app.ui.screens.SettingsScreen
 import com.plexquest.app.viewmodel.SplashViewModel
 
 object Routes {
@@ -31,6 +32,7 @@ object Routes {
     const val DETAIL = "detail/{ratingKey}"
     const val SEARCH = "search"
     const val PLAYER = "player/{ratingKey}"
+    const val SETTINGS = "settings"
 
     fun library(sectionId: String, title: String) = "library/$sectionId/${title.encodeForNav()}"
     fun detail(ratingKey: String) = "detail/$ratingKey"
@@ -79,6 +81,7 @@ fun PlexQuestNavHost(vm: SplashViewModel = hiltViewModel()) {
                 onLibraryClick = { id, title -> navController.navigate(Routes.library(id, title)) },
                 onMediaClick = { ratingKey -> navController.navigate(Routes.detail(ratingKey)) },
                 onSearchClick = { navController.navigate(Routes.SEARCH) },
+                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
             )
         }
 
@@ -123,6 +126,17 @@ fun PlexQuestNavHost(vm: SplashViewModel = hiltViewModel()) {
             PlayerScreen(
                 ratingKey = back.arguments?.getString("ratingKey") ?: "",
                 onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onLoggedOut = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
             )
         }
     }

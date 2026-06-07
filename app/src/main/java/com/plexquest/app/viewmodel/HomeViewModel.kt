@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.plexquest.app.data.models.MediaItem
 import com.plexquest.app.data.models.MediaLibrary
+import com.plexquest.app.data.models.PlexHub
 import com.plexquest.app.data.models.PlexServer
 import com.plexquest.app.data.repository.PlexRepository
 import com.plexquest.app.data.repository.PlexResult
@@ -17,10 +18,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class HomeHub(
+    val title: String,
+    val items: List<MediaItem>,
+)
+
 data class HomeState(
     val libraries: List<MediaLibrary> = emptyList(),
-    val onDeck: List<MediaItem> = emptyList(),
-    val recentlyAdded: List<MediaItem> = emptyList(),
+    val hubs: List<HomeHub> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
 )
@@ -42,45 +47,77 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
 
-            val server = activeServer()
-            if (server == null) {
+            val server = activeServer() ?: run {
                 _state.update { it.copy(isLoading = false, error = "No server selected") }
                 return@launch
             }
 
-            // Libraries
-            val libResult = repository.getLibraries(server).first { it !is PlexResult.Loading }
-            val libs = when (libResult) {
-                is PlexResult.Success -> libResult.data.also {
-                    _state.update { s -> s.copy(libraries = it) }
+            // Libraries for nav chips
+            launch {
+                val result = repository.getLibraries(server).first { it !is PlexResult.Loading }
+                if (result is PlexResult.Success) _state.update { it.copy(libraries = result.data) }
+            }
+
+            // Home hubs — the primary content rows (Continue Watching, Recently Added, etc.)
+            val hubResult = repository.getHomeHubs(server).first { it !is PlexResult.Loading }
+            when (hubResult) {
+                is PlexResult.Success -> {
+                    val hubs = hubResult.data.map { hub ->
+                        HomeHub(
+                            title = hub.title,
+                            items = hub.metadata?.map { meta ->
+                                MediaItem(
+                                    ratingKey = meta.ratingKey,
+                                    title = meta.title,
+                                    year = meta.year,
+                                    summary = meta.summary,
+                                    thumb = meta.thumb?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" },
+                                    art = meta.art?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" },
+                                    type = meta.type,
+                                    duration = meta.duration,
+                                    viewOffset = meta.viewOffset,
+                                    grandparentTitle = meta.grandparentTitle,
+                                    parentIndex = meta.parentIndex,
+                                    index = meta.index,
+                                    contentRating = meta.contentRating,
+                                    rating = meta.rating,
+                                    audienceRating = meta.audienceRating,
+                                    addedAt = meta.addedAt,
+                                )
+                            } ?: emptyList(),
+                        )
+                    }
+                    _state.update { it.copy(hubs = hubs, isLoading = false) }
                 }
                 is PlexResult.Error -> {
-                    _state.update { it.copy(isLoading = false, error = libResult.message) }
-                    return@launch
+                    // Hubs not available (older Plex server?) — fall back to on-deck + recently added
+                    fallbackLoad(server)
                 }
-                else -> return@launch
+                else -> {}
             }
-
-            // Global on-deck (Continue Watching across all libraries)
-            launch {
-                val result = repository.getOnDeck(server).first { it !is PlexResult.Loading }
-                if (result is PlexResult.Success) {
-                    _state.update { it.copy(onDeck = result.data) }
-                }
-            }
-
-            // Recently Added from first library
-            launch {
-                val firstLib = libs.firstOrNull() ?: return@launch
-                val result = repository.getRecentlyAdded(server, firstLib.key)
-                    .first { it !is PlexResult.Loading }
-                if (result is PlexResult.Success) {
-                    _state.update { it.copy(recentlyAdded = result.data) }
-                }
-            }
-
-            _state.update { it.copy(isLoading = false) }
         }
+    }
+
+    private suspend fun fallbackLoad(server: PlexServer) {
+        val hubs = mutableListOf<HomeHub>()
+
+        val deckResult = repository.getOnDeck(server).first { it !is PlexResult.Loading }
+        if (deckResult is PlexResult.Success && deckResult.data.isNotEmpty()) {
+            hubs.add(HomeHub("Continue Watching", deckResult.data))
+        }
+
+        val libResult = repository.getLibraries(server).first { it !is PlexResult.Loading }
+        if (libResult is PlexResult.Success) {
+            libResult.data.take(3).forEach { lib ->
+                val recResult = repository.getRecentlyAdded(server, lib.key)
+                    .first { it !is PlexResult.Loading }
+                if (recResult is PlexResult.Success && recResult.data.isNotEmpty()) {
+                    hubs.add(HomeHub("Recently Added · ${lib.title}", recResult.data))
+                }
+            }
+        }
+
+        _state.update { it.copy(hubs = hubs, isLoading = false) }
     }
 
     private suspend fun activeServer(): PlexServer? {

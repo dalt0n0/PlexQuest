@@ -27,25 +27,52 @@ fun LoginScreen(
         if (state.isLoggedIn) onLoginSuccess()
     }
 
+    // Token dialog
+    if (state.showTokenDialog) {
+        AlertDialog(
+            onDismissRequest = vm::closeTokenDialog,
+            title = { Text("Sign in with token") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Find your token: Plex Web → Settings → Troubleshooting → \"Your account token\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = state.tokenInput,
+                        onValueChange = vm::onTokenInputChange,
+                        label = { Text("Plex token") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = vm::signInWithToken,
+                    enabled = state.tokenInput.isNotBlank() && !state.isLoading,
+                ) {
+                    if (state.isLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Connect")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::closeTokenDialog) { Text("Cancel") }
+            },
+        )
+    }
+
     var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = "PlexQuest",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = "Plex on Meta Quest",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text("PlexQuest", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+        Text("Plex on Meta Quest", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(48.dp))
 
@@ -65,14 +92,13 @@ fun LoginScreen(
             onValueChange = vm::onPasswordChange,
             label = { Text("Password") },
             singleLine = true,
-            visualTransformation = if (passwordVisible) VisualTransformation.None
-                                    else PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        contentDescription = if (passwordVisible) "Hide" else "Show",
                     )
                 }
             },
@@ -91,16 +117,13 @@ fun LoginScreen(
             enabled = !state.isLoading && state.email.isNotBlank() && state.password.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) {
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            } else {
-                Text("Sign in with Plex")
-            }
+            if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Text("Sign in with Plex")
         }
 
         Spacer(Modifier.height(16.dp))
 
-        TextButton(onClick = vm::signInWithToken) {
+        TextButton(onClick = vm::openTokenDialog) {
             Text("Use Plex token instead")
         }
     }

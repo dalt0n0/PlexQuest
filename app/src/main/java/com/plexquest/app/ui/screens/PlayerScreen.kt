@@ -37,12 +37,22 @@ fun PlayerScreen(
     val state by vm.state.collectAsState()
     var controlsVisible by remember { mutableStateOf(true) }
 
-    // Auto-hide controls
     LaunchedEffect(controlsVisible, state.isPlaying) {
         if (controlsVisible && state.isPlaying) {
             delay(3000)
             controlsVisible = false
         }
+    }
+
+    // Error state — show over black background with back button
+    if (state.error != null) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(state.error!!, color = Color.White)
+                Button(onClick = onBack) { Text("Go back") }
+            }
+        }
+        return
     }
 
     Box(
