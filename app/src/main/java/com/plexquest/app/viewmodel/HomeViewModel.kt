@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.plexquest.app.data.models.MediaItem
 import com.plexquest.app.data.models.MediaLibrary
+import com.plexquest.app.data.models.PlexServer
 import com.plexquest.app.data.repository.PlexRepository
 import com.plexquest.app.data.repository.PlexResult
 import com.plexquest.app.data.store.PlexPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -34,33 +36,46 @@ class HomeViewModel @Inject constructor(
 
     init { load() }
 
+    fun reload() = load()
+
     private fun load() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
 
-            val servers = preferences.servers.firstOrNull() ?: emptyList()
-            val activeId = preferences.activeServerId.firstOrNull()
-            val server = servers.firstOrNull { it.machineIdentifier == activeId }
-                ?: servers.firstOrNull()
-
+            val server = activeServer()
             if (server == null) {
                 _state.update { it.copy(isLoading = false, error = "No server selected") }
                 return@launch
             }
 
-            // Load libraries
-            repository.getLibraries(server).collect { result ->
-                when (result) {
-                    is PlexResult.Success -> {
-                        _state.update { it.copy(libraries = result.data) }
-                        // Load on-deck and recently added from first library
-                        result.data.firstOrNull()?.let { lib ->
-                            loadOnDeck(server, lib.key)
-                            loadRecentlyAdded(server, lib.key)
-                        }
-                    }
-                    is PlexResult.Error -> _state.update { it.copy(error = result.message) }
-                    PlexResult.Loading -> {}
+            // Libraries
+            val libResult = repository.getLibraries(server).first { it !is PlexResult.Loading }
+            val libs = when (libResult) {
+                is PlexResult.Success -> libResult.data.also {
+                    _state.update { s -> s.copy(libraries = it) }
+                }
+                is PlexResult.Error -> {
+                    _state.update { it.copy(isLoading = false, error = libResult.message) }
+                    return@launch
+                }
+                else -> return@launch
+            }
+
+            // Global on-deck (Continue Watching across all libraries)
+            launch {
+                val result = repository.getOnDeck(server).first { it !is PlexResult.Loading }
+                if (result is PlexResult.Success) {
+                    _state.update { it.copy(onDeck = result.data) }
+                }
+            }
+
+            // Recently Added from first library
+            launch {
+                val firstLib = libs.firstOrNull() ?: return@launch
+                val result = repository.getRecentlyAdded(server, firstLib.key)
+                    .first { it !is PlexResult.Loading }
+                if (result is PlexResult.Success) {
+                    _state.update { it.copy(recentlyAdded = result.data) }
                 }
             }
 
@@ -68,19 +83,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadOnDeck(server: com.plexquest.app.data.models.PlexServer, sectionId: String) {
-        repository.getOnDeck(server, sectionId).collect { result ->
-            if (result is PlexResult.Success) {
-                _state.update { it.copy(onDeck = result.data) }
-            }
-        }
-    }
-
-    private suspend fun loadRecentlyAdded(server: com.plexquest.app.data.models.PlexServer, sectionId: String) {
-        repository.getRecentlyAdded(server, sectionId).collect { result ->
-            if (result is PlexResult.Success) {
-                _state.update { it.copy(recentlyAdded = result.data) }
-            }
-        }
+    private suspend fun activeServer(): PlexServer? {
+        val servers = preferences.servers.firstOrNull() ?: return null
+        val activeId = preferences.activeServerId.firstOrNull()
+        return servers.firstOrNull { it.machineIdentifier == activeId } ?: servers.firstOrNull()
     }
 }

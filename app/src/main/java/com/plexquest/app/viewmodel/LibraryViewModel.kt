@@ -9,6 +9,7 @@ import com.plexquest.app.data.store.PlexPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -43,12 +44,12 @@ class LibraryViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.getLibraryContents(server, sectionId).collect { result ->
-                when (result) {
-                    is PlexResult.Success -> _state.update { it.copy(isLoading = false, items = result.data) }
-                    is PlexResult.Error -> _state.update { it.copy(isLoading = false, error = result.message) }
-                    PlexResult.Loading -> {}
-                }
+            val result = repository.getLibraryContents(server, sectionId)
+                .first { it !is PlexResult.Loading }
+            when (result) {
+                is PlexResult.Success -> _state.update { it.copy(isLoading = false, items = result.data) }
+                is PlexResult.Error -> _state.update { it.copy(isLoading = false, error = result.message) }
+                else -> {}
             }
         }
     }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,12 +52,11 @@ class SearchViewModel @Inject constructor(
         val server = servers.firstOrNull { it.machineIdentifier == activeId } ?: servers.firstOrNull() ?: return
 
         _state.update { it.copy(isLoading = true) }
-        repository.search(server, query).collect { result ->
-            when (result) {
-                is PlexResult.Success -> _state.update { it.copy(isLoading = false, results = result.data) }
-                is PlexResult.Error -> _state.update { it.copy(isLoading = false) }
-                PlexResult.Loading -> {}
-            }
+        val result = repository.search(server, query).first { it !is PlexResult.Loading }
+        when (result) {
+            is PlexResult.Success -> _state.update { it.copy(isLoading = false, results = result.data) }
+            is PlexResult.Error -> _state.update { it.copy(isLoading = false) }
+            else -> {}
         }
     }
 }

@@ -24,19 +24,19 @@ interface PlexAuthApi {
         @Header("X-Plex-Platform") platform: String = "Android",
     ): Response<PlexUserResponse>
 
-    @GET("pins/{pinId}.json")
+    @GET("api/v2/pins/{pinId}")
     suspend fun checkPin(
         @Path("pinId") pinId: Long,
         @Header("X-Plex-Client-Identifier") clientId: String,
     ): Response<PlexPinResponse>
 
-    @POST("pins.json")
+    @POST("api/v2/pins")
     suspend fun createPin(
         @Header("X-Plex-Client-Identifier") clientId: String,
         @Header("X-Plex-Product") product: String = "PlexQuest",
     ): Response<PlexPinResponse>
 
-    @GET("resources.json")
+    @GET("api/v2/resources")
     suspend fun getResources(
         @Header("X-Plex-Token") token: String,
         @Header("X-Plex-Client-Identifier") clientId: String,

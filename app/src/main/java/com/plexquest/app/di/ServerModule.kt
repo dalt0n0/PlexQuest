@@ -16,14 +16,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object ServerModule {
 
-    // Base Retrofit with a placeholder URL — actual server URL is set per-request
-    // via a dynamic OkHttp interceptor or by rebuilding with the active server's URL.
-    // For simplicity in v0.1 we use full URLs passed at call-site via @Url.
+    // Base URL irrelevant — all calls use @Url full URLs built in PlexRepository
     @Provides
     @Singleton
     @Named("server")
     fun provideServerRetrofit(client: OkHttpClient, gson: Gson): Retrofit = Retrofit.Builder()
-        .baseUrl("http://localhost:32400/")
+        .baseUrl("https://plex.tv/")
         .client(client)
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()

@@ -46,7 +46,7 @@ object AppModule {
     @Singleton
     @Named("auth")
     fun provideAuthRetrofit(client: OkHttpClient, gson: Gson): Retrofit = Retrofit.Builder()
-        .baseUrl("https://plex.tv/api/v2/")
+        .baseUrl("https://plex.tv/")
         .client(client)
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.plexquest.app.data.models.PlexServer
 import com.plexquest.app.data.repository.PlexRepository
 import com.plexquest.app.data.repository.PlexResult
 import com.plexquest.app.data.store.PlexPreferences
@@ -14,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -24,9 +26,10 @@ data class PlayerState(
     val title: String = "",
     val subtitle: String? = null,
     val isPlaying: Boolean = false,
-    val isBuffering: Boolean = false,
+    val isBuffering: Boolean = true,
     val position: Long = 0L,
     val duration: Long = 0L,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -50,7 +53,6 @@ class PlayerViewModel @Inject constructor(
             }
         })
 
-        // Poll position every second
         viewModelScope.launch {
             while (isActive) {
                 _state.update { it.copy(
@@ -64,33 +66,45 @@ class PlayerViewModel @Inject constructor(
 
     fun load(ratingKey: String) {
         viewModelScope.launch {
-            val servers = preferences.servers.firstOrNull() ?: return@launch
-            val activeId = preferences.activeServerId.firstOrNull()
-            val server = servers.firstOrNull { it.machineIdentifier == activeId }
-                ?: servers.firstOrNull() ?: return@launch
-
-            repository.getLibraryContents(server, ratingKey).collect { result ->
-                if (result is PlexResult.Success) {
-                    // getLibraryContents here is misused — use getMetadata instead (v0.1 simplification)
-                }
+            val server = activeServer() ?: run {
+                _state.update { it.copy(error = "No server") }
+                return@launch
             }
 
-            // Direct metadata fetch
-            try {
-                val response = com.plexquest.app.data.api.PlexApi::class.java
-                // Placeholder: actual implementation fetches metadata then builds stream URL
-                // from the first Part's key and calls player.setMediaItem
-                // Full implementation in a follow-up PR
-            } catch (_: Exception) {}
-        }
-    }
+            val result = repository.getMetadata(server, ratingKey)
+                .first { it !is PlexResult.Loading }
 
-    fun playUrl(url: String, title: String, subtitle: String? = null, resumeMs: Long = 0L) {
-        _state.update { it.copy(title = title, subtitle = subtitle) }
-        val mediaItem = Media3Item.fromUri(url)
-        player.setMediaItem(mediaItem, resumeMs)
-        player.prepare()
-        player.play()
+            when (result) {
+                is PlexResult.Error -> _state.update { it.copy(error = result.message) }
+                is PlexResult.Success -> {
+                    val meta = result.data
+                    val partKey = meta.media?.firstOrNull()?.parts?.firstOrNull()?.key
+                    if (partKey == null) {
+                        _state.update { it.copy(error = "No media part found") }
+                        return@launch
+                    }
+
+                    val streamUrl = repository.buildStreamUrl(server, partKey)
+                    val resumeMs = meta.viewOffset ?: 0L
+
+                    // Build subtitle from grandparent (show) + season/episode info
+                    val subtitle = when {
+                        meta.grandparentTitle != null && meta.parentIndex != null && meta.index != null ->
+                            "${meta.grandparentTitle} · S${meta.parentIndex}E${meta.index}"
+                        meta.year != null -> meta.year.toString()
+                        else -> null
+                    }
+
+                    _state.update { it.copy(title = meta.title, subtitle = subtitle) }
+
+                    val mediaItem = Media3Item.fromUri(streamUrl)
+                    player.setMediaItem(mediaItem, resumeMs)
+                    player.prepare()
+                    player.play()
+                }
+                else -> {}
+            }
+        }
     }
 
     fun togglePlayPause() {
@@ -105,6 +119,12 @@ class PlayerViewModel @Inject constructor(
     fun seekRelative(deltaMs: Long) {
         val target = (player.currentPosition + deltaMs).coerceIn(0L, player.duration)
         player.seekTo(target)
+    }
+
+    private suspend fun activeServer(): PlexServer? {
+        val servers = preferences.servers.firstOrNull() ?: return null
+        val activeId = preferences.activeServerId.firstOrNull()
+        return servers.firstOrNull { it.machineIdentifier == activeId } ?: servers.firstOrNull()
     }
 
     override fun onCleared() {

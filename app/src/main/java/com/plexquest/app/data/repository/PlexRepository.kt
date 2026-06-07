@@ -1,13 +1,11 @@
 package com.plexquest.app.data.repository
 
 import com.plexquest.app.data.api.PlexApi
-import com.plexquest.app.data.api.PlexAuthApi
 import com.plexquest.app.data.models.LibraryType
 import com.plexquest.app.data.models.MediaItem
 import com.plexquest.app.data.models.MediaLibrary
 import com.plexquest.app.data.models.MetadataData
 import com.plexquest.app.data.models.PlexServer
-import com.plexquest.app.data.store.PlexPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
@@ -22,14 +20,13 @@ sealed class PlexResult<out T> {
 @Singleton
 class PlexRepository @Inject constructor(
     private val plexApi: PlexApi,
-    private val plexAuthApi: PlexAuthApi,
-    private val preferences: PlexPreferences,
 ) {
 
     fun getLibraries(server: PlexServer): Flow<PlexResult<List<MediaLibrary>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.getLibraries(server.token)
+            val url = "${server.baseUrl}/library/sections"
+            val response = plexApi.getLibraries(url, server.token)
             if (response.isSuccessful) {
                 val libraries = response.body()?.mediaContainer?.directories
                     ?.map { dir ->
@@ -37,7 +34,7 @@ class PlexRepository @Inject constructor(
                             key = dir.key,
                             title = dir.title,
                             type = LibraryType.from(dir.type ?: ""),
-                            thumb = dir.thumb?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" },
+                            thumb = dir.thumb?.let { "${server.baseUrl}$it" },
                         )
                     } ?: emptyList()
                 emit(PlexResult.Success(libraries))
@@ -57,7 +54,9 @@ class PlexRepository @Inject constructor(
     ): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.getLibraryContents(sectionId, server.token, start, pageSize)
+            val url = "${server.baseUrl}/library/sections/$sectionId/all" +
+                "?X-Plex-Container-Start=$start&X-Plex-Container-Size=$pageSize&sort=addedAt:desc"
+            val response = plexApi.getLibraryContents(url, server.token)
             if (response.isSuccessful) {
                 val items = response.body()?.mediaContainer?.metadata
                     ?.map { it.toMediaItem(server) } ?: emptyList()
@@ -73,7 +72,8 @@ class PlexRepository @Inject constructor(
     fun getRecentlyAdded(server: PlexServer, sectionId: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.getRecentlyAdded(sectionId, server.token)
+            val url = "${server.baseUrl}/library/sections/$sectionId/recentlyAdded?X-Plex-Container-Size=20"
+            val response = plexApi.getRecentlyAdded(url, server.token)
             if (response.isSuccessful) {
                 val items = response.body()?.mediaContainer?.metadata
                     ?.map { it.toMediaItem(server) } ?: emptyList()
@@ -86,14 +86,33 @@ class PlexRepository @Inject constructor(
         }
     }
 
-    fun getOnDeck(server: PlexServer, sectionId: String): Flow<PlexResult<List<MediaItem>>> = flow {
+    // Global on-deck across all libraries
+    fun getOnDeck(server: PlexServer): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.getOnDeck(sectionId, server.token)
+            val url = "${server.baseUrl}/library/onDeck?X-Plex-Container-Size=20"
+            val response = plexApi.getOnDeck(url, server.token)
             if (response.isSuccessful) {
                 val items = response.body()?.mediaContainer?.metadata
                     ?.map { it.toMediaItem(server) } ?: emptyList()
                 emit(PlexResult.Success(items))
+            } else {
+                emit(PlexResult.Error("Server error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            emit(PlexResult.Error("Network error: ${e.message}", e))
+        }
+    }
+
+    fun getMetadata(server: PlexServer, ratingKey: String): Flow<PlexResult<MetadataData>> = flow {
+        emit(PlexResult.Loading)
+        try {
+            val url = "${server.baseUrl}/library/metadata/$ratingKey"
+            val response = plexApi.getMetadata(url, server.token)
+            if (response.isSuccessful) {
+                val item = response.body()?.mediaContainer?.metadata?.firstOrNull()
+                if (item != null) emit(PlexResult.Success(item))
+                else emit(PlexResult.Error("No metadata returned"))
             } else {
                 emit(PlexResult.Error("Server error: ${response.code()}"))
             }
@@ -105,7 +124,9 @@ class PlexRepository @Inject constructor(
     fun search(server: PlexServer, query: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.search(query, server.token)
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            val url = "${server.baseUrl}/search?query=$encoded&limit=30"
+            val response = plexApi.search(url, server.token)
             if (response.isSuccessful) {
                 val items = response.body()?.mediaContainer?.metadata
                     ?.map { it.toMediaItem(server) } ?: emptyList()
@@ -121,7 +142,8 @@ class PlexRepository @Inject constructor(
     fun getChildren(server: PlexServer, ratingKey: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
         try {
-            val response = plexApi.getChildren(ratingKey, server.token)
+            val url = "${server.baseUrl}/library/metadata/$ratingKey/children"
+            val response = plexApi.getChildren(url, server.token)
             if (response.isSuccessful) {
                 val items = response.body()?.mediaContainer?.metadata
                     ?.map { it.toMediaItem(server) } ?: emptyList()
@@ -136,9 +158,6 @@ class PlexRepository @Inject constructor(
 
     fun buildStreamUrl(server: PlexServer, partKey: String): String =
         "${server.baseUrl}$partKey?X-Plex-Token=${server.token}"
-
-    fun buildThumbUrl(server: PlexServer, path: String?): String? =
-        path?.let { "${server.baseUrl}$it?X-Plex-Token=${server.token}" }
 
     private fun MetadataData.toMediaItem(server: PlexServer) = MediaItem(
         ratingKey = ratingKey,
