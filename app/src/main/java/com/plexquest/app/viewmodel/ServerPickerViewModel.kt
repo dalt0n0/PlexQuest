@@ -18,6 +18,10 @@ data class ServerPickerState(
     val isLoading: Boolean = false,
     val selectedServer: PlexServer? = null,
     val error: String? = null,
+    val showAddDialog: Boolean = false,
+    val manualHost: String = "",
+    val manualPort: String = "32400",
+    val manualError: String? = null,
 )
 
 @HiltViewModel
@@ -45,28 +49,47 @@ class ServerPickerViewModel @Inject constructor(
                     val servers = response.body()
                         ?.filter { it.provides.contains("server") }
                         ?.flatMap { resource ->
-                            resource.connections?.map { conn ->
-                                PlexServer(
-                                    name = resource.name,
-                                    address = conn.uri.removePrefix("http://").removePrefix("https://").substringBefore(":"),
-                                    port = conn.uri.substringAfterLast(":").toIntOrNull() ?: 32400,
-                                    token = resource.accessToken ?: token,
-                                    machineIdentifier = resource.machineIdentifier,
-                                    local = conn.local,
-                                )
-                            } ?: emptyList()
+                            (resource.connections ?: emptyList())
+                                .filter { !it.relay }  // skip relay-only connections
+                                .map { conn ->
+                                    PlexServer(
+                                        name = resource.name,
+                                        baseUrl = conn.uri.trimEnd('/'),
+                                        token = resource.accessToken ?: token,
+                                        machineIdentifier = resource.machineIdentifier,
+                                        local = conn.local,
+                                    )
+                                }
                         }
-                        // Prefer local connections first
-                        ?.sortedByDescending { it.local }
+                        ?.sortedWith(compareByDescending<PlexServer> { it.local }.thenBy { it.name })
                         ?: emptyList()
 
-                    preferences.saveServers(servers)
-                    _state.update { it.copy(isLoading = false, servers = servers) }
+                    // Merge with any previously saved manual servers
+                    val saved = preferences.servers.firstOrNull() ?: emptyList()
+                    val manual = saved.filter { s -> servers.none { it.machineIdentifier == s.machineIdentifier } }
+                    val merged = servers + manual
+
+                    preferences.saveServers(merged)
+                    _state.update { it.copy(isLoading = false, servers = merged) }
                 } else {
-                    _state.update { it.copy(isLoading = false, error = "Failed to load servers (${response.code()})") }
+                    val saved = preferences.servers.firstOrNull() ?: emptyList()
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            servers = saved,
+                            error = if (saved.isEmpty()) "Discovery failed (${response.code()}). Add server manually." else null,
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = "Network error: ${e.message}") }
+                val saved = preferences.servers.firstOrNull() ?: emptyList()
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        servers = saved,
+                        error = if (saved.isEmpty()) "Network error. Add server manually." else null,
+                    )
+                }
             }
         }
     }
@@ -75,6 +98,38 @@ class ServerPickerViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.setActiveServer(server.machineIdentifier)
             _state.update { it.copy(selectedServer = server) }
+        }
+    }
+
+    fun openAddDialog() = _state.update { it.copy(showAddDialog = true, manualHost = "", manualPort = "32400", manualError = null) }
+    fun closeAddDialog() = _state.update { it.copy(showAddDialog = false) }
+    fun onManualHostChange(v: String) = _state.update { it.copy(manualHost = v, manualError = null) }
+    fun onManualPortChange(v: String) = _state.update { it.copy(manualPort = v, manualError = null) }
+
+    fun addManualServer() {
+        val host = _state.value.manualHost.trim()
+        val port = _state.value.manualPort.trim().toIntOrNull()
+        if (host.isBlank()) {
+            _state.update { it.copy(manualError = "Enter an IP address or hostname") }
+            return
+        }
+        if (port == null || port !in 1..65535) {
+            _state.update { it.copy(manualError = "Invalid port") }
+            return
+        }
+        viewModelScope.launch {
+            val token = preferences.authToken.firstOrNull() ?: return@launch
+            val baseUrl = "http://$host:$port"
+            val server = PlexServer(
+                name = host,
+                baseUrl = baseUrl,
+                token = token,
+                machineIdentifier = "manual-$host-$port",
+                local = true,
+            )
+            val updated = _state.value.servers + server
+            preferences.saveServers(updated)
+            _state.update { it.copy(servers = updated, showAddDialog = false) }
         }
     }
 }

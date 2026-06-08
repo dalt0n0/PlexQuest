@@ -4,13 +4,14 @@ import com.google.gson.annotations.SerializedName
 
 data class PlexServer(
     val name: String,
-    val address: String,
-    val port: Int = 32400,
+    val baseUrl: String,   // full URI from plex.tv e.g. "http://192.168.1.x:32400"
     val token: String,
     val machineIdentifier: String,
     val local: Boolean = true,
 ) {
-    val baseUrl: String get() = "http://$address:$port"
+    // Derived for display / legacy use
+    val address: String get() = baseUrl.removePrefix("https://").removePrefix("http://").substringBefore(":")
+    val port: Int get() = baseUrl.substringAfterLast(":").trimEnd('/').toIntOrNull() ?: 32400
 }
 
 data class MediaLibrary(

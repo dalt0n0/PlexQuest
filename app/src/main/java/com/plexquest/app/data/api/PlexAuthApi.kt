@@ -56,7 +56,7 @@ data class PlexResourceResponse(
     val name: String,
     @SerializedName("clientIdentifier") val machineIdentifier: String,
     val provides: String,
-    @SerializedName("Connection") val connections: List<PlexConnection>?,
+    val connections: List<PlexConnection>?,  // v2 API uses lowercase
     val accessToken: String?,
 )
 
