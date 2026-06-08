@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 data class ServerPickerState(
@@ -30,8 +29,6 @@ class ServerPickerViewModel @Inject constructor(
     private val _state = MutableStateFlow(ServerPickerState())
     val state = _state.asStateFlow()
 
-    private val clientId = UUID.randomUUID().toString()
-
     init { refresh() }
 
     fun refresh() {
@@ -43,7 +40,7 @@ class ServerPickerViewModel @Inject constructor(
                 return@launch
             }
             try {
-                val response = authApi.getResources(token, clientId)
+                val response = authApi.getResources(token)
                 if (response.isSuccessful) {
                     val servers = response.body()
                         ?.filter { it.provides.contains("server") }

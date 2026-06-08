@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -17,6 +18,9 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    // Deterministic UUID — same across app launches on the same install
+    private val CLIENT_ID: String = UUID.nameUUIDFromBytes("plexquest-meta-quest".toByteArray()).toString()
 
     @Provides
     @Singleton
@@ -27,11 +31,13 @@ object AppModule {
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .addHeader("Accept", "application/json")
-                .addHeader("X-Plex-Product", "PlexQuest")
-                .addHeader("X-Plex-Version", "0.1.0")
-                .addHeader("X-Plex-Platform", "Android")
-                .addHeader("X-Plex-Device", "Meta Quest")
+                .header("Accept", "application/json")
+                .header("X-Plex-Product", "PlexQuest")
+                .header("X-Plex-Version", "0.1.0")
+                .header("X-Plex-Platform", "Android")
+                .header("X-Plex-Device", "Meta Quest")
+                .header("X-Plex-Device-Name", "PlexQuest")
+                .header("X-Plex-Client-Identifier", CLIENT_ID)
                 .build()
             chain.proceed(request)
         }

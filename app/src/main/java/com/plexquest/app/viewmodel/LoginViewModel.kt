@@ -3,13 +3,13 @@ package com.plexquest.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.plexquest.app.data.api.PlexAuthApi
+import com.plexquest.app.data.api.SignInBody
 import com.plexquest.app.data.store.PlexPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 data class LoginState(
@@ -30,7 +30,6 @@ class LoginViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(LoginState())
     val state = _state.asStateFlow()
-    private val clientId = UUID.randomUUID().toString()
 
     fun onEmailChange(value: String) = _state.update { it.copy(email = value, error = null) }
     fun onPasswordChange(value: String) = _state.update { it.copy(password = value, error = null) }
@@ -44,7 +43,7 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
-                val response = authApi.signIn(s.email, s.password, clientId)
+                val response = authApi.signIn(SignInBody(s.email, s.password))
                 if (response.isSuccessful) {
                     val user = response.body()?.user
                     if (user != null) {
@@ -73,7 +72,7 @@ class LoginViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 // Verify token by fetching resources
-                val response = authApi.getResources(token, clientId)
+                val response = authApi.getResources(token)
                 if (response.isSuccessful) {
                     preferences.saveAuthInfo(token, "Plex User", null)
                     _state.update { it.copy(isLoading = false, isLoggedIn = true, showTokenDialog = false) }
