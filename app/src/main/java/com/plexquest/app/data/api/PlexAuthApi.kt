@@ -7,6 +7,7 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 // Talks to plex.tv for auth + server discovery
 interface PlexAuthApi {
@@ -18,7 +19,7 @@ interface PlexAuthApi {
     suspend fun checkPin(@Path("pinId") pinId: Long): Response<PlexPinResponse>
 
     @POST("api/v2/pins")
-    suspend fun createPin(): Response<PlexPinResponse>
+    suspend fun createPin(@Query("strong") strong: Boolean = true): Response<PlexPinResponse>
 
     @GET("api/v2/resources")
     suspend fun getResources(

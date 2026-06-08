@@ -18,6 +18,7 @@ import com.plexquest.app.ui.screens.DetailScreen
 import com.plexquest.app.ui.screens.HomeScreen
 import com.plexquest.app.ui.screens.LibraryScreen
 import com.plexquest.app.ui.screens.LoginScreen
+import com.plexquest.app.ui.screens.PlexOAuthScreen
 import com.plexquest.app.ui.screens.PlayerScreen
 import com.plexquest.app.ui.screens.SearchScreen
 import com.plexquest.app.ui.screens.ServerPickerScreen
@@ -26,6 +27,7 @@ import com.plexquest.app.viewmodel.SplashViewModel
 
 object Routes {
     const val LOGIN = "login"
+    const val OAUTH = "oauth"
     const val SERVER_PICKER = "server_picker"
     const val HOME = "home"
     const val LIBRARY = "library/{sectionId}/{title}"
@@ -58,11 +60,25 @@ fun PlexQuestNavHost(vm: SplashViewModel = hiltViewModel()) {
 
         composable(Routes.LOGIN) {
             LoginScreen(
+                onSignInWithPlex = {
+                    navController.navigate(Routes.OAUTH)
+                },
                 onLoginSuccess = {
                     navController.navigate(Routes.SERVER_PICKER) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
-                }
+                },
+            )
+        }
+
+        composable(Routes.OAUTH) {
+            PlexOAuthScreen(
+                onSuccess = {
+                    navController.navigate(Routes.SERVER_PICKER) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                },
+                onCancel = { navController.popBackStack() },
             )
         }
 

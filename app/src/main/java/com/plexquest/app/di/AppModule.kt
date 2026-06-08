@@ -1,6 +1,7 @@
 package com.plexquest.app.di
 
 import com.google.gson.Gson
+import com.plexquest.app.PlexConstants
 import com.plexquest.app.data.api.PlexAuthApi
 import dagger.Module
 import dagger.Provides
@@ -10,7 +11,6 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -19,8 +19,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // Deterministic UUID — same across app launches on the same install
-    private val CLIENT_ID: String = UUID.nameUUIDFromBytes("plexquest-meta-quest".toByteArray()).toString()
+    private val CLIENT_ID get() = PlexConstants.CLIENT_ID
 
     @Provides
     @Singleton
