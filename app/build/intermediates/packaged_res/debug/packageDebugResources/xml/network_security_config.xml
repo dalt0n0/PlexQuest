@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Plex local servers use plain HTTP on port 32400.
+    Allow cleartext for all traffic — user controls which server they connect to.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

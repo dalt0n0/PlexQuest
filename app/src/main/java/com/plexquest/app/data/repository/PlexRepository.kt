@@ -170,16 +170,25 @@ class PlexRepository @Inject constructor(
     fun buildStreamUrl(server: PlexServer, partKey: String): String =
         "${server.baseUrl}$partKey?X-Plex-Token=${server.token}"
 
-    fun buildTranscodeUrl(server: PlexServer, ratingKey: String, partKey: String, clientId: String): String {
-        val encodedPath = java.net.URLEncoder.encode(partKey, "UTF-8")
+    fun buildTranscodeUrl(server: PlexServer, ratingKey: String, partKey: String, qualityKbps: Int): String {
+        val (w, h) = when {
+            qualityKbps >= 20_000 -> "3840" to "2160"
+            qualityKbps >= 8_000  -> "1920" to "1080"
+            qualityKbps >= 4_000  -> "1280" to "720"
+            qualityKbps >= 2_000  -> "854"  to "480"
+            else                  -> "640"  to "360"
+        }
         return "${server.baseUrl}/video/:/transcode/universal/start.m3u8" +
             "?path=/library/metadata/$ratingKey" +
             "&mediaIndex=0&partIndex=0" +
             "&protocol=hls&fastSeek=1&directPlay=0&directStream=0" +
-            "&videoResolution=1920x1080&maxVideoBitrate=8000" +
+            "&videoResolution=${w}x${h}&maxVideoBitrate=$qualityKbps" +
+            "&audioCodec=aac&audioBitrate=256&audioChannels=2" +
             "&X-Plex-Token=${server.token}" +
-            "&X-Plex-Client-Identifier=$clientId" +
-            "&X-Plex-Product=PlexQuest"
+            "&X-Plex-Client-Identifier=${com.plexquest.app.PlexConstants.CLIENT_ID}" +
+            "&X-Plex-Product=PlexQuest" +
+            "&X-Plex-Platform=Android" +
+            "&X-Plex-Device=MetaQuest"
     }
 
     fun MetadataData.toMediaItem(server: PlexServer) = MediaItem(
