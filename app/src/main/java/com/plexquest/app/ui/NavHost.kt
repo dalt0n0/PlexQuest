@@ -6,6 +6,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,9 +55,13 @@ fun PlexQuestNavHost(vm: SplashViewModel = hiltViewModel()) {
         return
     }
 
+    // Snapshot once — NavHost must never see startDestination change after creation.
+    // If startDest flowed again (e.g. servers saved mid-flow), NavController would
+    // rebuild its graph and collide with in-flight programmatic navigation.
+    val initialDest = remember { startDest!! }
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = startDest!!) {
+    NavHost(navController = navController, startDestination = initialDest) {
 
         composable(Routes.LOGIN) {
             LoginScreen(
