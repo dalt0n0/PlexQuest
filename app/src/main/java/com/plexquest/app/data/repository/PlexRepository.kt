@@ -8,6 +8,7 @@ import com.plexquest.app.data.models.MetadataData
 import com.plexquest.app.data.models.PlexHub
 import com.plexquest.app.data.models.PlexServer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,6 +19,9 @@ sealed class PlexResult<out T> {
     data object Loading : PlexResult<Nothing>()
 }
 
+// All flows use .catch { } instead of try/catch inside the builder.
+// flow { } builders must NOT catch CancellationException subclasses (like AbortFlowException
+// thrown by first { } terminal operators). The .catch operator handles this correctly.
 @Singleton
 class PlexRepository @Inject constructor(
     private val plexApi: PlexApi,
@@ -25,27 +29,23 @@ class PlexRepository @Inject constructor(
 
     fun getLibraries(server: PlexServer): Flow<PlexResult<List<MediaLibrary>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/sections"
-            val response = plexApi.getLibraries(url, server.token)
-            if (response.isSuccessful) {
-                val libraries = response.body()?.mediaContainer?.directories
-                    ?.map { dir ->
-                        MediaLibrary(
-                            key = dir.key,
-                            title = dir.title,
-                            type = LibraryType.from(dir.type ?: ""),
-                            thumb = dir.thumb?.let { "${server.baseUrl}$it" },
-                        )
-                    } ?: emptyList()
-                emit(PlexResult.Success(libraries))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/sections"
+        val response = plexApi.getLibraries(url, server.token)
+        if (response.isSuccessful) {
+            val libraries = response.body()?.mediaContainer?.directories
+                ?.map { dir ->
+                    MediaLibrary(
+                        key = dir.key,
+                        title = dir.title,
+                        type = LibraryType.from(dir.type ?: ""),
+                        thumb = dir.thumb?.let { "${server.baseUrl}$it" },
+                    )
+                } ?: emptyList()
+            emit(PlexResult.Success(libraries))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun getLibraryContents(
         server: PlexServer,
@@ -54,134 +54,104 @@ class PlexRepository @Inject constructor(
         pageSize: Int = 50,
     ): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/sections/$sectionId/all" +
-                "?X-Plex-Container-Start=$start&X-Plex-Container-Size=$pageSize&sort=addedAt:desc"
-            val response = plexApi.getLibraryContents(url, server.token)
-            if (response.isSuccessful) {
-                val items = response.body()?.mediaContainer?.metadata
-                    ?.map { it.toMediaItem(server) } ?: emptyList()
-                emit(PlexResult.Success(items))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/sections/$sectionId/all" +
+            "?X-Plex-Container-Start=$start&X-Plex-Container-Size=$pageSize&sort=addedAt:desc"
+        val response = plexApi.getLibraryContents(url, server.token)
+        if (response.isSuccessful) {
+            val items = response.body()?.mediaContainer?.metadata
+                ?.map { it.toMediaItem(server) } ?: emptyList()
+            emit(PlexResult.Success(items))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun getRecentlyAdded(server: PlexServer, sectionId: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/sections/$sectionId/recentlyAdded?X-Plex-Container-Size=20"
-            val response = plexApi.getRecentlyAdded(url, server.token)
-            if (response.isSuccessful) {
-                val items = response.body()?.mediaContainer?.metadata
-                    ?.map { it.toMediaItem(server) } ?: emptyList()
-                emit(PlexResult.Success(items))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/sections/$sectionId/recentlyAdded?X-Plex-Container-Size=20"
+        val response = plexApi.getRecentlyAdded(url, server.token)
+        if (response.isSuccessful) {
+            val items = response.body()?.mediaContainer?.metadata
+                ?.map { it.toMediaItem(server) } ?: emptyList()
+            emit(PlexResult.Success(items))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
-    // Global on-deck across all libraries
     fun getOnDeck(server: PlexServer): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/onDeck?X-Plex-Container-Size=20"
-            val response = plexApi.getOnDeck(url, server.token)
-            if (response.isSuccessful) {
-                val items = response.body()?.mediaContainer?.metadata
-                    ?.map { it.toMediaItem(server) } ?: emptyList()
-                emit(PlexResult.Success(items))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/onDeck?X-Plex-Container-Size=20"
+        val response = plexApi.getOnDeck(url, server.token)
+        if (response.isSuccessful) {
+            val items = response.body()?.mediaContainer?.metadata
+                ?.map { it.toMediaItem(server) } ?: emptyList()
+            emit(PlexResult.Success(items))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun getMetadata(server: PlexServer, ratingKey: String): Flow<PlexResult<MetadataData>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/metadata/$ratingKey"
-            val response = plexApi.getMetadata(url, server.token)
-            if (response.isSuccessful) {
-                val item = response.body()?.mediaContainer?.metadata?.firstOrNull()
-                if (item != null) emit(PlexResult.Success(item))
-                else emit(PlexResult.Error("No metadata returned"))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/metadata/$ratingKey"
+        val response = plexApi.getMetadata(url, server.token)
+        if (response.isSuccessful) {
+            val item = response.body()?.mediaContainer?.metadata?.firstOrNull()
+            if (item != null) emit(PlexResult.Success(item))
+            else emit(PlexResult.Error("No metadata returned"))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun search(server: PlexServer, query: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-            val url = "${server.baseUrl}/search?query=$encoded&limit=30"
-            val response = plexApi.search(url, server.token)
-            if (response.isSuccessful) {
-                val items = response.body()?.mediaContainer?.metadata
-                    ?.map { it.toMediaItem(server) } ?: emptyList()
-                emit(PlexResult.Success(items))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "${server.baseUrl}/search?query=$encoded&limit=30"
+        val response = plexApi.search(url, server.token)
+        if (response.isSuccessful) {
+            val items = response.body()?.mediaContainer?.metadata
+                ?.map { it.toMediaItem(server) } ?: emptyList()
+            emit(PlexResult.Success(items))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun getChildren(server: PlexServer, ratingKey: String): Flow<PlexResult<List<MediaItem>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/library/metadata/$ratingKey/children"
-            val response = plexApi.getChildren(url, server.token)
-            if (response.isSuccessful) {
-                val items = response.body()?.mediaContainer?.metadata
-                    ?.map { it.toMediaItem(server) } ?: emptyList()
-                emit(PlexResult.Success(items))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/library/metadata/$ratingKey/children"
+        val response = plexApi.getChildren(url, server.token)
+        if (response.isSuccessful) {
+            val items = response.body()?.mediaContainer?.metadata
+                ?.map { it.toMediaItem(server) } ?: emptyList()
+            emit(PlexResult.Success(items))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     fun getHomeHubs(server: PlexServer): Flow<PlexResult<List<PlexHub>>> = flow {
         emit(PlexResult.Loading)
-        try {
-            val url = "${server.baseUrl}/hubs/home?count=20&includeEmpty=0"
-            val response = plexApi.getHomeHubs(url, server.token)
-            if (response.isSuccessful) {
-                val hubs = response.body()?.mediaContainer?.hubs
-                    ?.filter { (it.metadata?.size ?: 0) > 0 }
-                    ?.map { hub ->
-                        hub.copy(metadata = hub.metadata?.map { it } )
-                    } ?: emptyList()
-                emit(PlexResult.Success(hubs))
-            } else {
-                emit(PlexResult.Error("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            emit(PlexResult.Error("Network error: ${e.message}", e))
+        val url = "${server.baseUrl}/hubs/home?count=20&includeEmpty=0"
+        val response = plexApi.getHomeHubs(url, server.token)
+        if (response.isSuccessful) {
+            val hubs = response.body()?.mediaContainer?.hubs
+                ?.filter { (it.metadata?.size ?: 0) > 0 }
+                ?.map { hub -> hub.copy(metadata = hub.metadata?.map { it }) }
+                ?: emptyList()
+            emit(PlexResult.Success(hubs))
+        } else {
+            emit(PlexResult.Error("Server error: ${response.code()}"))
         }
-    }
+    }.catch { e -> emit(PlexResult.Error("Network error: ${e.message}", e)) }
 
     suspend fun reportTimeline(
         server: PlexServer,
         ratingKey: String,
         partKey: String,
-        state: String,  // "playing" | "paused" | "stopped"
+        state: String,
         positionMs: Long,
         durationMs: Long,
     ) {
@@ -194,7 +164,7 @@ class PlexRepository @Inject constructor(
                 "&duration=$durationMs" +
                 "&hasMDE=1"
             plexApi.reportTimeline(url, server.token)
-        } catch (_: Exception) { /* best-effort, don't crash */ }
+        } catch (_: Exception) { /* best-effort */ }
     }
 
     fun buildStreamUrl(server: PlexServer, partKey: String): String =
